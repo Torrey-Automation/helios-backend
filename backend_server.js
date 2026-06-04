@@ -25,22 +25,36 @@ app.post("/api/chat", async (req, res) => {
     return res.status(400).json({ error: "Missing systemPrompt or messages" });
   }
 
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
   try {
-    const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
+    const stream = client.messages.stream({
+      model: "claude-sonnet-4",
+      max_tokens: 2000,
       system: systemPrompt,
       messages: messages,
     });
 
-    const text = response.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("");
+    stream.on("text", (text) => {
+      res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
+    });
 
-    res.json({ text });
+    stream.on("end", () => {
+      res.write(`data: ${JSON.stringify({ type: "end" })}\n\n`);
+      res.end();
+    });
+
+    stream.on("error", (error) => {
+      res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
+      res.end();
+    });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
+    res.end();
   }
 });
 
