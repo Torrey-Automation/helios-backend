@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 
 const app = express();
+
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
@@ -24,6 +25,7 @@ app.post("/api/analyze", async (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
     const stream = client.messages.stream({
       model: "claude-sonnet-4-20250514",
@@ -61,6 +63,7 @@ app.post("/api/chat", async (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("Access-Control-Allow-Origin", "*");
 
     const stream = client.messages.stream({
       model: "claude-sonnet-4-20250514",
