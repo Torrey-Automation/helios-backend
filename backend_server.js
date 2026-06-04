@@ -1,56 +1,22 @@
 import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
-import cors from "cors";
 
 const app = express();
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type'],
-}));
-app.options('*', cors());
+// Bulletproof CORS — manual headers on every response, explicit OPTIONS handling.
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(express.json());
 
 const client = new Anthropic();
-
-app.post("/api/analyze", async (req, res) => {
-  const { systemPrompt, userMessage } = req.body;
-
-  if (!systemPrompt || !userMessage) {
-    return res.status(400).json({ error: "Missing systemPrompt or userMessage" });
-  }
-
-  try {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-
-    const stream = client.messages.stream({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-    });
-
-    stream.on("text", (text) => {
-      res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
-    });
-
-    stream.on("end", () => {
-      res.write(`data: ${JSON.stringify({ type: "end" })}\n\n`);
-      res.end();
-    });
-
-    stream.on("error", (error) => {
-      res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
-      res.end();
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
 app.post("/api/chat", async (req, res) => {
   const { systemPrompt, messages } = req.body;
@@ -60,31 +26,19 @@ app.post("/api/chat", async (req, res) => {
   }
 
   try {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("Access-Control-Allow-Origin", "*");
-
-    const stream = client.messages.stream({
+    const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 1000,
       system: systemPrompt,
       messages: messages,
     });
 
-    stream.on("text", (text) => {
-      res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
-    });
+    const text = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("");
 
-    stream.on("end", () => {
-      res.write(`data: ${JSON.stringify({ type: "end" })}\n\n`);
-      res.end();
-    });
-
-    stream.on("error", (error) => {
-      res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
-      res.end();
-    });
+    res.json({ text });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
