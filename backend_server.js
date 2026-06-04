@@ -3,7 +3,6 @@ import express from "express";
 
 const app = express();
 
-// Bulletproof CORS — manual headers on every response, explicit OPTIONS handling.
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -25,36 +24,22 @@ app.post("/api/chat", async (req, res) => {
     return res.status(400).json({ error: "Missing systemPrompt or messages" });
   }
 
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no");
-  res.flushHeaders();
-
   try {
-    const stream = client.messages.stream({
+    const response = await client.messages.create({
       model: "claude-sonnet-4",
       max_tokens: 2000,
       system: systemPrompt,
       messages: messages,
     });
 
-    stream.on("text", (text) => {
-      res.write(`data: ${JSON.stringify({ type: "text", text })}\n\n`);
-    });
+    const text = response.content
+      .filter((b) => b.type === "text")
+      .map((b) => b.text)
+      .join("");
 
-    stream.on("end", () => {
-      res.write(`data: ${JSON.stringify({ type: "end" })}\n\n`);
-      res.end();
-    });
-
-    stream.on("error", (error) => {
-      res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
-      res.end();
-    });
+    res.json({ text });
   } catch (error) {
-    res.write(`data: ${JSON.stringify({ type: "error", message: error.message })}\n\n`);
-    res.end();
+    res.status(500).json({ error: error.message });
   }
 });
 
